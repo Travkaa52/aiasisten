@@ -72,7 +72,7 @@ class Config:
     # --- AI provider: Google Gemini (текст, vision-OCR, аудио, генерация
     # изображений) ---
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-flash-tts-preview"
+    gemini_model: str = "gemini-3.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
 
     # --- Storage ---
@@ -119,7 +119,7 @@ class Config:
             bot_token=bot_token,
             owner_ids=_get_list("OWNER_IDS"),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-            gemini_model=_get_str("GEMINI_MODEL", "gemini-3.1-flash-tts-preview"),
+            gemini_model=_get_str("GEMINI_MODEL", "gemini-3.5-flash"),
             gemini_image_model=_get_str("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
             db_path=_get_str("DB_PATH", str(BASE_DIR / "data" / "assistant.db")),
             cache_dir=_get_str("CACHE_DIR", str(BASE_DIR / "assistant" / "cache" / "storage")),
