@@ -1,0 +1,15 @@
+services:
+  assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: telegram-ai-assistant:latest
+    container_name: telegram-ai-assistant
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - RUN_DURATION_SECONDS=999999999  # в Docker процесс работает непрерывно, а не как в GH Actions job
