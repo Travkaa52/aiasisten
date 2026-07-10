@@ -49,20 +49,19 @@ def _get_list(name: str) -> list[int]:
 
 @dataclass(frozen=True)
 class Config:
-    # --- Telegram (Telethon user-account, НЕ Bot API) ---
-    api_id: int
-    api_hash: str
-    session_string: str
+    # --- Telegram (aiogram Bot API + функция Telegram Business "Чат-боты" /
+    # Automated messages — НЕ Telethon-юзербот, НЕ api_id/api_hash) ---
+    bot_token: str
 
-    # --- Владелец аккаунта (для админ-команд, DND, заметок и т.д.) ---
+    # --- ID владельца(ев) для админ-команд (доп. к тем, что определяются
+    # автоматически через Business Connection) ---
     owner_ids: list[int] = field(default_factory=list)
 
-    # --- AI provider ---
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-5-20250929"
-    openai_api_key: str = ""  # используется для генерации изображений и transcribe
-    openai_image_model: str = "dall-e-3"
-    openai_whisper_model: str = "whisper-1"
+    # --- AI provider: Google Gemini (текст, vision-OCR, аудио, генерация
+    # изображений) ---
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_image_model: str = "gemini-2.5-flash-image"
 
     # --- Storage ---
     db_path: str = str(BASE_DIR / "data" / "assistant.db")
@@ -72,8 +71,7 @@ class Config:
 
     # --- Runtime behaviour ---
     # Job в GitHub Actions живёт ограниченное время: слушаем события
-    # столько секунд, затем аккуратно завершаемся (чтобы не упереться
-    # в лимит воркфлоу и не оставить оборванное TCP-соединение).
+    # столько секунд (long polling Bot API), затем аккуратно завершаемся.
     run_duration_seconds: int = 240
     reconnect_max_attempts: int = 5
     reconnect_base_delay: float = 2.0
@@ -94,42 +92,23 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
-        api_id_raw = os.getenv("API_ID", "")
-        api_hash = os.getenv("API_HASH", "")
-        session_string = os.getenv("SESSION", "")
+        bot_token = os.getenv("BOT_TOKEN", "")
 
-        missing = [
-            name
-            for name, val in (
-                ("API_ID", api_id_raw),
-                ("API_HASH", api_hash),
-                ("SESSION", session_string),
-            )
-            if not val
-        ]
+        missing = [name for name, val in (("BOT_TOKEN", bot_token),) if not val]
         if missing:
             sys.stderr.write(
                 f"[config] Отсутствуют обязательные переменные окружения: {', '.join(missing)}. "
-                "Задайте их в .env локально или в GitHub Secrets.\n"
+                "Создайте бота через @BotFather и задайте BOT_TOKEN в .env "
+                "локально или в GitHub Secrets.\n"
             )
             raise SystemExit(78)  # EX_CONFIG
 
-        try:
-            api_id = int(api_id_raw)
-        except ValueError:
-            sys.stderr.write("[config] API_ID должен быть целым числом.\n")
-            raise SystemExit(78)
-
         return cls(
-            api_id=api_id,
-            api_hash=api_hash,
-            session_string=session_string,
+            bot_token=bot_token,
             owner_ids=_get_list("OWNER_IDS"),
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"),
-            openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-            openai_image_model=os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3"),
-            openai_whisper_model=os.getenv("OPENAI_WHISPER_MODEL", "whisper-1"),
+            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_image_model=os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
             db_path=os.getenv("DB_PATH", str(BASE_DIR / "data" / "assistant.db")),
             cache_dir=os.getenv("CACHE_DIR", str(BASE_DIR / "assistant" / "cache" / "storage")),
             log_dir=os.getenv("LOG_DIR", str(BASE_DIR / "logs")),

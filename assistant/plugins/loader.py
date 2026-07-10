@@ -12,7 +12,7 @@ import inspect
 import pkgutil
 from pathlib import Path
 
-from telethon import TelegramClient
+from aiogram import Dispatcher
 
 from assistant.logger import log
 from assistant.plugins.base import Plugin
@@ -41,12 +41,12 @@ def discover_plugins() -> list[type[Plugin]]:
     return found
 
 
-def load_plugins(client: TelegramClient) -> list[Plugin]:
+def load_plugins(dp: Dispatcher) -> list[Plugin]:
     instances: list[Plugin] = []
     for plugin_cls in discover_plugins():
         try:
             instance = plugin_cls()
-            instance.register(client)
+            instance.register(dp)
             instances.append(instance)
             log.info("Плагин '{}' загружен и зарегистрирован.", instance.name)
         except Exception as exc:  # noqa: BLE001

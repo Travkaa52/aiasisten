@@ -4,7 +4,10 @@ handlers/reminders.py
   /remind <время> <текст>   например: /remind 30m Позвонить врачу
   /reminders                список активных
   /unremind <id>            отмена
-Фактическая отправка происходит в scheduler.py (задача check_reminders).
+Фактическая отправка происходит в scheduler.py (задача check_reminders),
+через bot.send_message(..., business_connection_id=...), чтобы напоминание
+пришло от лица подключённого аккаунта (функция Telegram Business
+«Чат-боты»), а не от самого бота.
 """
 
 from __future__ import annotations
@@ -16,10 +19,22 @@ from assistant.models import Reminder
 from assistant.utils.validators import TimeParseError, parse_remind_time
 
 
-async def create_reminder(owner_id: int, chat_id: int, raw_time: str, text: str) -> Reminder:
+async def create_reminder(
+    owner_id: int,
+    chat_id: int,
+    raw_time: str,
+    text: str,
+    business_connection_id: str | None = None,
+) -> Reminder:
     remind_at = parse_remind_time(raw_time)  # может выбросить TimeParseError
     async with get_session() as session:
-        reminder = Reminder(owner_id=owner_id, chat_id=chat_id, text=text.strip(), remind_at=remind_at)
+        reminder = Reminder(
+            owner_id=owner_id,
+            chat_id=chat_id,
+            text=text.strip(),
+            remind_at=remind_at,
+            business_connection_id=business_connection_id,
+        )
         session.add(reminder)
         await session.flush()
         await session.refresh(reminder)

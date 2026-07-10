@@ -7,25 +7,31 @@ APScheduler (AsyncIOScheduler) для фоновых периодических 
 Так как процесс в GitHub Actions живёт ограниченное время
 (config.run_duration_seconds), эти задачи выполняются часто (раз в
 15-30 секунд), чтобы успеть отработать в рамках короткого окна жизни.
+
+Отправка напоминаний идёт через aiogram Bot.send_message(...,
+business_connection_id=...), чтобы сообщение пришло от лица аккаунта,
+подключённого через функцию Telegram Business «Чат-боты», а не от бота.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 
+from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select, update
 
 from assistant.database import get_session
+from assistant.handlers.business import get_active_connection_id
 from assistant.logger import log
 from assistant.models import Reminder, StatEntry
 from assistant.cache.cache_manager import cache
 
 
 class TaskScheduler:
-    def __init__(self, telegram_client) -> None:
-        self.client = telegram_client
+    def __init__(self, bot: Bot) -> None:
+        self.bot = bot
         self.scheduler = AsyncIOScheduler(timezone="UTC")
 
     def start(self) -> None:
@@ -63,8 +69,14 @@ class TaskScheduler:
                 due = list(result.scalars().all())
                 for reminder in due:
                     try:
-                        await self.client.send_message(
-                            reminder.chat_id, f"⏰ Напоминание: {reminder.text}"
+                        business_connection_id = (
+                            reminder.business_connection_id
+                            or await get_active_connection_id(reminder.owner_id)
+                        )
+                        await self.bot.send_message(
+                            chat_id=reminder.chat_id,
+                            text=f"⏰ Напоминание: {reminder.text}",
+                            business_connection_id=business_connection_id,
                         )
                         log.info(
                             "Напоминание #{} отправлено в чат {}.",

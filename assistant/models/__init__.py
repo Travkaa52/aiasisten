@@ -6,6 +6,7 @@ from assistant.models.note import Note
 from assistant.models.reminder import Reminder
 from assistant.models.stats import StatEntry
 from assistant.models.settings import Setting
+from assistant.models.business_connection import BusinessConnectionRecord
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "Reminder",
     "StatEntry",
     "Setting",
+    "BusinessConnectionRecord",
 ]
