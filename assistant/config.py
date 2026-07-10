@@ -34,6 +34,19 @@ def _get_int(name: str, default: int) -> int:
     try:
         return int(val)
     except ValueError:
+        sys.stderr.write(f"[config] Предупреждение: Не удалось привести {name}='{val}' к int. Используется дефолт: {default}\n")
+        return default
+
+
+def _get_float(name: str, default: float) -> float:
+    """Безопасное получение float переменной, оберегает от пустых строк в CI."""
+    val = os.getenv(name)
+    if val is None or val.strip() == "":
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        sys.stderr.write(f"[config] Предупреждение: Не удалось привести {name}='{val}' к float. Используется дефолт: {default}\n")
         return default
 
 
@@ -52,27 +65,31 @@ def _get_str(name: str, default: str) -> str:
 def _get_list(name: str) -> list[int]:
     val = os.getenv(name, "")
     result: list[int] = []
+    if not val.strip():
+        return result
+        
     for chunk in val.split(","):
         chunk = chunk.strip()
+        if not chunk:
+            continue
         if chunk.isdigit() or (chunk.startswith("-") and chunk[1:].isdigit()):
             result.append(int(chunk))
+        else:
+            sys.stderr.write(f"[config] Предупреждение: Некорректный элемент '{chunk}' в списке {name}. Пропущен.\n")
     return result
 
 
 @dataclass(frozen=True)
 class Config:
-    # --- Telegram (aiogram Bot API + функция Telegram Business "Чат-боты" /
-    # Automated messages — НЕ Telethon-юзербот, НЕ api_id/api_hash) ---
+    # --- Telegram (aiogram Bot API + функция Telegram Business) ---
     bot_token: str
 
-    # --- ID владельца(ев) для админ-команд (доп. к тем, что определяются
-    # автоматически через Business Connection) ---
+    # --- ID владельца(ев) для админ-команд ---
     owner_ids: list[int] = field(default_factory=list)
 
-    # --- AI provider: Google Gemini (текст, vision-OCR, аудио, генерация
-    # изображений) ---
+    # --- AI provider: Google Gemini ---
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-2.5-pro"
     gemini_image_model: str = "gemini-2.5-flash-image"
 
     # --- Storage ---
@@ -82,8 +99,6 @@ class Config:
     log_level: str = "INFO"
 
     # --- Runtime behaviour ---
-    # Job в GitHub Actions живёт ограниченное время: слушаем события
-    # столько секунд (long polling Bot API), затем аккуратно завершаемся.
     run_duration_seconds: int = 240
     reconnect_max_attempts: int = 5
     reconnect_base_delay: float = 2.0
@@ -94,7 +109,7 @@ class Config:
     antispam_auto_blacklist: bool = True
 
     # --- Access control ---
-    whitelist_mode: bool = False  # если True — отвечаем только whitelisted
+    whitelist_mode: bool = False
 
     # --- Memory ---
     memory_context_messages: int = 20
@@ -105,7 +120,9 @@ class Config:
     @classmethod
     def load(cls) -> "Config":
         bot_token = os.getenv("BOT_TOKEN", "")
+        gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 
+        # Если Gemini критически необходим — добавьте его в этот кортеж проверки
         missing = [name for name, val in (("BOT_TOKEN", bot_token),) if not val]
         if missing:
             sys.stderr.write(
@@ -118,16 +135,16 @@ class Config:
         return cls(
             bot_token=bot_token,
             owner_ids=_get_list("OWNER_IDS"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-            gemini_model=_get_str("GEMINI_MODEL", "gemini-2.5-flash"),
-            gemini_image_model=_get_str("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
+            gemini_api_key=gemini_api_key,
+            gemini_model=_get_str("GEMINI_MODEL", "gemini-2.5-pro"),
+            gemini_image_model=_get_str("GEMINI_IMAGE_MODEL", "gemini-2.5-pro"),
             db_path=_get_str("DB_PATH", str(BASE_DIR / "data" / "assistant.db")),
             cache_dir=_get_str("CACHE_DIR", str(BASE_DIR / "assistant" / "cache" / "storage")),
             log_dir=_get_str("LOG_DIR", str(BASE_DIR / "logs")),
             log_level=_get_str("LOG_LEVEL", "INFO").upper(),
             run_duration_seconds=_get_int("RUN_DURATION_SECONDS", 240),
             reconnect_max_attempts=_get_int("RECONNECT_MAX_ATTEMPTS", 5),
-            reconnect_base_delay=float(os.getenv("RECONNECT_BASE_DELAY", "2.0")),
+            reconnect_base_delay=_get_float("RECONNECT_BASE_DELAY", 2.0), # Заменено на хелпер
             antispam_max_messages=_get_int("ANTISPAM_MAX_MESSAGES", 8),
             antispam_window_seconds=_get_int("ANTISPAM_WINDOW_SECONDS", 10),
             antispam_auto_blacklist=_get_bool("ANTISPAM_AUTO_BLACKLIST", True),
