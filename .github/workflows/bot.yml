@@ -44,13 +44,11 @@ jobs:
 
       - name: Run assistant
         env:
-          API_ID: ${{ secrets.API_ID }}
-          API_HASH: ${{ secrets.API_HASH }}
-          SESSION: ${{ secrets.SESSION }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           OWNER_IDS: ${{ secrets.OWNER_IDS }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
           RUN_DURATION_SECONDS: ${{ vars.RUN_DURATION_SECONDS }}
           LOG_LEVEL: ${{ vars.LOG_LEVEL }}
           WHITELIST_MODE: ${{ vars.WHITELIST_MODE }}
