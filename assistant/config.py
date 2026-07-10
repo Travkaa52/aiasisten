@@ -137,4 +137,4 @@ class Config:
         )
 
 
-config = Config.load())
+config = Config.load()
