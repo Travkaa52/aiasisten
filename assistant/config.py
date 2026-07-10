@@ -37,6 +37,18 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
+def _get_str(name: str, default: str) -> str:
+    """Как os.getenv(name, default), но пустая строка тоже считается
+    "не задано". Важно для GitHub Actions: ${{ vars.X }} для несуществующей
+    переменной репозитория подставляется как пустая строка, а не отсутствует
+    вовсе — обычный os.getenv(name, default) в этом случае вернул бы "",
+    а не default."""
+    val = os.getenv(name)
+    if val is None or val.strip() == "":
+        return default
+    return val
+
+
 def _get_list(name: str) -> list[int]:
     val = os.getenv(name, "")
     result: list[int] = []
@@ -107,12 +119,12 @@ class Config:
             bot_token=bot_token,
             owner_ids=_get_list("OWNER_IDS"),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
-            gemini_image_model=os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
-            db_path=os.getenv("DB_PATH", str(BASE_DIR / "data" / "assistant.db")),
-            cache_dir=os.getenv("CACHE_DIR", str(BASE_DIR / "assistant" / "cache" / "storage")),
-            log_dir=os.getenv("LOG_DIR", str(BASE_DIR / "logs")),
-            log_level=os.getenv("LOG_LEVEL", "INFO"),
+            gemini_model=_get_str("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_image_model=_get_str("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
+            db_path=_get_str("DB_PATH", str(BASE_DIR / "data" / "assistant.db")),
+            cache_dir=_get_str("CACHE_DIR", str(BASE_DIR / "assistant" / "cache" / "storage")),
+            log_dir=_get_str("LOG_DIR", str(BASE_DIR / "logs")),
+            log_level=_get_str("LOG_LEVEL", "INFO").upper(),
             run_duration_seconds=_get_int("RUN_DURATION_SECONDS", 240),
             reconnect_max_attempts=_get_int("RECONNECT_MAX_ATTEMPTS", 5),
             reconnect_base_delay=float(os.getenv("RECONNECT_BASE_DELAY", "2.0")),
@@ -125,4 +137,4 @@ class Config:
         )
 
 
-config = Config.load()
+config = Config.load())
