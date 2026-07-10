@@ -72,7 +72,7 @@ class Config:
     # --- AI provider: Google Gemini (текст, vision-OCR, аудио, генерация
     # изображений) ---
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
 
     # --- Storage ---
