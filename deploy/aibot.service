@@ -1,0 +1,28 @@
+# Пример systemd unit-файла для запуска бота на VPS (Linux).
+#
+# Установка:
+#   1) sudo cp deploy/aibot.service /etc/systemd/system/aibot.service
+#   2) Отредактируй WorkingDirectory и User под свой сервер
+#   3) sudo systemctl daemon-reload
+#   4) sudo systemctl enable --now aibot
+#   5) sudo systemctl status aibot      # проверить, что запустился
+#   6) journalctl -u aibot -f           # смотреть логи в реальном времени
+
+[Unit]
+Description=Business AI Assistant Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aibot
+WorkingDirectory=/home/aibot/aiasistent
+ExecStart=/home/aibot/aiasistent/venv/bin/python bot.py
+EnvironmentFile=/home/aibot/aiasistent/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

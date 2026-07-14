@@ -1,216 +1,224 @@
-# Telegram AI Assistant
+# 🤖 Business AI Assistant Bot
 
-Production-ready персональный AI-ассистент для Telegram на **aiogram 3**
-(обычный Bot API + функция **Telegram Business «Чат-боты»**, а не
-Telethon-юзербот и не api_id/api_hash), с памятью диалога, автоответчиком,
-плагинами и полным набором утилитарных функций. AI-провайдер — **Google
-Gemini**. Работает как long-running процесс (Docker/self-host) либо как
-короткоживущий job в **GitHub Actions**, запускаемый по расписанию каждые
-5 минут.
+Telegram-бот с **Business Mode** и ИИ на базе **Gemini 3.5 Flash** (топовая и полностью бесплатная модель по API на июль 2026) для личного использования в бизнесе.
+Отвечает твоим контактам от твоего имени, помнит историю каждого диалога, управляется через панель в боте.
 
-## Как это работает
+---
 
-1. Вы создаёте обычного Telegram-бота через **@BotFather** и получаете
-   `BOT_TOKEN`.
-2. В настройках своего аккаунта: **Telegram → Настройки → Telegram
-   Business → Чат-боты** (в английском интерфейсе — *Settings → Telegram
-   Business → Chatbots*) — вы подключаете этого бота к своему личному
-   аккаунту.
-3. С этого момента Telegram присылает боту апдейт `business_connection`
-   (кто подключил бота и с какими правами), а все входящие/исходящие
-   сообщения в чатах вашего аккаунта дублируются боту как
-   `business_message`.
-4. Ассистент отличает:
-   - сообщения **клиентов** (не вас) в этих чатах → отвечает через AI
-     (автоответчик, с учётом истории диалога);
-   - сообщения **от вас самих** (владельца) → это self-команды
-     (`/rewrite`, `/remind`, `/note` и т.д.), как раньше в Telethon-версии,
-     только теперь это работает без входа в аккаунт через api_id/api_hash.
-5. Ответы отправляются через `bot.send_message(..., business_connection_id=...)`,
-   поэтому получателю они видны как отправленные от вашего аккаунта, а не
-   "от бота".
+## ✨ Что умеет
 
-Никакой авторизации через `my.telegram.org`, `StringSession` или номер
-телефона не требуется — только обычный токен бота.
-
-## Возможности
-
-| Категория | Что делает |
+| Функция | Описание |
 |---|---|
-| AI Assistant | Диалог с учётом контекста памяти (`memory.py`) через Google Gemini |
-| Автоответы | Автоматически отвечает клиентам в бизнес-чатах и личных сообщениях (`handlers/autoresponder.py`) |
-| Переписывание | `/rewrite <стиль>` в ответ на сообщение |
-| Перевод | `/translate <язык>` в ответ на сообщение |
-| Суммаризация | `/summarize` в ответ на сообщение |
-| Напоминания | `/remind`, `/reminders`, `/unremind` — доставка через APScheduler |
-| Заметки | `/note add|list|get|del` |
-| Поиск | `/search <запрос>` по истории сообщений |
-| OCR | `/ocr` в ответ на фото (через Gemini vision) |
-| Voice-to-Text | `/voice` в ответ на голосовое (нативно через Gemini, без Whisper) |
-| Генерация изображений | `/imagine <промпт>` (через Gemini image generation) |
-| Анализ файлов | `/analyze` в ответ на документ |
-| Плагины | Автозагрузка из `assistant/plugins/` |
-| Статистика | `/stats` |
-| Антиспам | Sliding-window rate limit + авто-блэклист |
-| Whitelist/Blacklist | `/whitelist`, `/blacklist` |
-| Do Not Disturb | `/dnd on|off|status` |
+| 🧠 **Автоответы с ИИ** | Gemini 3.5 Flash отвечает от твоего имени в Business чатах (с авто-фолбэком на резервную модель) |
+| 📚 **История диалогов** | Помнит контекст каждой переписки (настраиваемая глубина) |
+| 📋 **Заметки о контактах** | Добавь заметку `/note USER_ID текст` — ИИ учтёт её при ответах |
+| 🔑 **Статические автоответы** | Быстрые ответы по ключевым словам (приоритет выше ИИ) |
+| 🔕 **Блокировка контактов** | `/block_contact USER_ID` — заблокировать автоответ конкретному |
+| 📣 **Рассылка** | Отправить сообщение всем пользователям |
+| 👥 **Менеджеры** | Делегировать доступ к панели другим |
+| 🎫 **Тикеты поддержки** | Пользователи пишут в поддержку → тикет падает в группу с кнопкой закрытия → менеджер отвечает reply в группе → ответ уходит пользователю |
+| 🛡 **Антиспам** | Фильтры ссылок и запрещённых слов |
+| 📊 **Статистика и аналитика** | Сколько сообщений, топ пользователей, активность по дням |
+| ✏️ **Кастомный промпт** | Настрой характер и знания ИИ прямо из панели |
 
-Self-команды пишутся **в чатах вашего аккаунта, подключённого через
-функцию «Чат-боты»** (или просто напрямую боту в личных сообщениях, если
-вы в `OWNER_IDS`) — например, ответом на сообщение клиента.
+---
 
-## Архитектура
+## ⚙️ Установка
 
-```
-assistant/
-    main.py               # точка входа: aiogram polling, run/shutdown
-    config.py              # конфигурация из .env / переменных окружения
-    database.py             # async SQLAlchemy engine + сессии (SQLite)
-    logger.py                # loguru: консоль + ротируемые файлы
-    ai.py                     # Google Gemini: чат/vision/аудио/генерация изображений
-    memory.py                  # скользящее окно контекста диалога
-    scheduler.py                # APScheduler: напоминания, очистка кэша
-    plugins/                     # автозагружаемые плагины (base.py, loader.py, ...)
-    handlers/
-        business.py                # учёт Business Connection ("Чат-боты")
-        access.py                   # определение владельца / whitelist / blacklist
-        autoresponder.py              # AI-ответы клиентам
-        commands.py                    # self-команды владельца
-        media.py                        # OCR/voice/analyze/imagine
-        antispam.py, dnd.py, notes.py, reminders.py, search.py
-    utils/                                # rate limiter, парсер времени, текстовые утилиты
-    models/                                # SQLAlchemy ORM модели (+ business_connection.py)
-    cache/                                  # файловый TTL-кэш
-```
+### 1. Получи необходимые данные
 
-## Быстрый старт (локально)
+- **BOT_TOKEN** — создай бота у [@BotFather](https://t.me/BotFather) и включи **Business Mode**:
+  `/mybots` → выбери бота → **Business Mode** → **Enable**, затем в приложении Telegram
+  подключи бота в **Настройки → Telegram для бизнеса → Чат-боты**.
+- **OWNER_ID** — твой Telegram ID (узнай у [@userinfobot](https://t.me/userinfobot))
+- **GEMINI_KEY** — получи бесплатно на [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) (без карты)
 
-### 1. Создайте бота и получите BOT_TOKEN
-
-В Telegram напишите **@BotFather** → `/newbot` → следуйте инструкциям →
-получите токен вида `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`.
-
-### 2. Подключите бота через функцию «Чат-боты»
-
-В приложении Telegram: **Настройки → Telegram Business → Чат-боты** →
-выберите вашего бота → включите нужные права (отвечать за вас, читать
-сообщения и т.д.). Функция Telegram Business доступна с активной
-подпиской Telegram Premium/Business.
-
-> Если у вас нет доступа к Telegram Business, можно тестировать ассистента
-> и в режиме обычных личных сообщений боту — тогда добавьте свой Telegram
-> ID в `OWNER_IDS`, и self-команды будут работать в личном чате с ботом.
-
-### 3. Получите GEMINI_API_KEY
-
-На https://aistudio.google.com/apikey создайте API-ключ Google AI Studio.
-
-### 4. Настройте .env
+### 2. Настройка
 
 ```bash
-cp .env.example .env
-# впишите BOT_TOKEN, GEMINI_API_KEY, OWNER_IDS и т.д.
-```
+git clone / распакуй архив
+cd aiasistent-main
 
-### 5. Запуск
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
 
-```bash
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python -m assistant.main
+
+cp .env.example .env
+# Открой .env и заполни все поля
 ```
 
-## Запуск в Docker
+### 3. Запуск
 
 ```bash
-cp .env.example .env   # заполните значения
+python bot.py
+```
+
+Если всё настроено верно, в логах появится:
+`Bot is running in Business Mode with Gemini AI. Press Ctrl+C to stop.`
+
+---
+
+## 🧠 Модель ИИ
+
+По умолчанию используется **`gemini-3.5-flash`** — самая мощная модель линейки
+Flash от Google на июль 2026, при этом полностью **бесплатная** по API
+(free tier, без привязки карты). Если модель когда-нибудь станет недоступна
+(смена региона, устаревание, лимиты) — бот автоматически переключится на
+резервную модель `GEMINI_MODEL_FALLBACK` (по умолчанию `gemini-2.5-flash`).
+
+Оба параметра настраиваются в `.env`:
+
+```env
+GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL_FALLBACK=gemini-2.5-flash
+```
+
+Актуальный список моделей и лимиты free tier всегда можно свериться на
+[странице цен Gemini API](https://ai.google.dev/gemini-api/docs/pricing) —
+Google периодически меняет линейку.
+
+---
+
+## 🔧 Настройка .env
+
+Полный шаблон со всеми параметрами и комментариями — в файле [`.env.example`](.env.example).
+Ключевые параметры:
+
+```env
+BOT_TOKEN=1234567890:ABC...
+OWNER_ID=123456789
+GEMINI_KEY=AIza...
+GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL_FALLBACK=gemini-2.5-flash
+
+SUPPORT_GROUP_ID=            # опционально: ID группы для тикетов поддержки
+
+OWNER_NAME=Алексей Иванов
+BUSINESS_NAME=ООО «Техно Плюс»
+BUSINESS_DESCRIPTION=Продаём IT-оборудование оптом и в розницу. Работаем по всей стране.
+
+AI_LANGUAGE=ru
+AI_HISTORY_DEPTH=10   # Сколько прошлых сообщений помнит ИИ в одном чате
+```
+
+---
+
+## 📱 Управление через бота
+
+### Основные команды
+
+| Команда | Что делает |
+|---|---|
+| `/admin` | Открыть панель администратора |
+| `/note USER_ID текст` | Добавить заметку о контакте (ИИ её учтёт) |
+| `/get_note USER_ID` | Посмотреть заметку |
+| `/block_contact USER_ID` | Запретить автоответы этому контакту |
+| `/unblock_contact USER_ID` | Разрешить снова |
+| `/history_clear CHAT_ID` | Очистить историю конкретного чата |
+
+### Режимы ИИ (настраивается в панели → 🧠 Настройки ИИ)
+
+- **🧠 Умный** — сначала ищет в статических автоответах, потом Gemini
+- **⚡ Всегда ИИ** — всегда генерирует ответ нейросетью
+- **🔕 Выключен** — ИИ молчит (только статические автоответы)
+
+### Тикеты поддержки
+
+1. Пользователь, который пишет боту в личку (не в Business-чат), видит кнопку
+   «📨 Написать в поддержку».
+2. Если задан `SUPPORT_GROUP_ID` — сообщение с карточкой тикета уходит в группу
+   с кнопкой «✅ Закрыть тикет».
+3. Менеджер отвечает **reply** прямо на карточку тикета в группе — ответ
+   автоматически уходит пользователю в личку.
+4. Кнопка «✅ Закрыть тикет» доступна владельцу и менеджерам.
+
+---
+
+## 🚀 Деплой на сервер
+
+У тебя есть три варианта — от простого к самому надёжному.
+
+### Вариант A: GitHub Actions (быстрый старт, без своего сервера)
+
+⚠️ **Важно понимать ограничения.** GitHub-раннеры не рассчитаны на процессы,
+которые должны работать вечно: у джобы жёсткий потолок **6 часов**, а сама
+машина после каждого запуска удаляется вместе с локальными файлами.
+
+В репозитории уже настроен `.github/workflows/bot.yml`, который это обходит:
+- перезапускает бота по расписанию (каждые 6 часов) через `schedule`;
+- сохраняет `bot.db` между запусками через Actions Artifacts;
+- не даёт двум копиям бота работать одновременно (`concurrency`), иначе
+  Telegram отдаёт `409 Conflict` на обеих;
+- штатно останавливает бота за 10 минут до истечения лимита джобы, чтобы
+  успеть сохранить базу.
+
+Это рабочее решение для старта, но между перезапусками возможен разрыв в
+несколько секунд, и оно не такое надёжное, как обычный сервер. **Для
+боевого использования бота в реальном бизнесе рекомендуется вариант B или C.**
+
+Настройка:
+1. Залей код в GitHub-репозиторий.
+2. В **Settings → Secrets and variables → Actions** добавь секреты:
+   `BOT_TOKEN`, `OWNER_ID`, `GEMINI_KEY` (обязательные), а также опционально
+   `SUPPORT_GROUP_ID`, `GEMINI_MODEL`, `GEMINI_MODEL_FALLBACK`, `OWNER_NAME`,
+   `BUSINESS_NAME`, `BUSINESS_DESCRIPTION`, `AI_LANGUAGE`, `AI_HISTORY_DEPTH`.
+3. Запусти workflow вручную первый раз: **Actions → Telegram Bot → Run workflow**.
+
+### Вариант B: Docker (рекомендуется для VPS)
+
+```bash
+cp .env.example .env   # заполни .env
 docker compose up -d --build
-docker compose logs -f
+docker compose logs -f   # смотреть логи
 ```
 
-В Docker-режиме процесс работает непрерывно (`RUN_DURATION_SECONDS`
-переопределён в `docker-compose.yml` на очень большое значение), в
-отличие от GitHub Actions, где job живёт ограниченное время.
+База данных сохраняется в Docker volume и переживает пересборку/перезапуск
+контейнера. `restart: unless-stopped` поднимает бота заново после ребута сервера.
 
-## Запуск в GitHub Actions
+### Вариант C: systemd (классический VPS, максимальный контроль)
 
-1. В настройках репозитория → **Settings → Secrets and variables →
-   Actions → Secrets** добавьте:
-   - `BOT_TOKEN`
-   - `OWNER_IDS` (например `123456789,987654321`, опционально)
-   - `GEMINI_API_KEY`
+Готовый unit-файл лежит в [`deploy/aibot.service`](deploy/aibot.service).
 
-2. По желанию, в **Variables** можно задать `RUN_DURATION_SECONDS`,
-   `LOG_LEVEL`, `WHITELIST_MODE`, `GEMINI_MODEL`, `GEMINI_IMAGE_MODEL` —
-   если не заданы, используются значения по умолчанию из `config.py`.
-
-3. Workflow `.github/workflows/bot.yml`:
-   - запускается по `cron: "*/5 * * * *"` (каждые 5 минут);
-   - можно запустить вручную через **Actions → Telegram AI Assistant
-     → Run workflow** (`workflow_dispatch`);
-   - устанавливает зависимости, запускает `python -m assistant.main`;
-   - при ошибке (ненулевой код возврата) job помечается как **failed**;
-   - логи при падении сохраняются как artifact (`assistant-logs-*`).
-
-4. **Важно про хранение состояния.** GitHub Actions runner —
-   эфемерная машина: файловая система не сохраняется между запусками
-   сама по себе. Workflow использует `actions/cache` для
-   персистентности `data/assistant.db` между запусками (лучшее
-   доступное решение на голом Actions). Для полностью надёжного
-   постоянного хранилища в проде рекомендуется self-host (Docker на
-   VPS) вместо GitHub Actions, либо вынести SQLite на внешний volume.
-
-## Переменные окружения
-
-Полный список — в `.env.example`. Обязательные: `BOT_TOKEN`,
-`GEMINI_API_KEY`. Остальные — с безопасными значениями по умолчанию.
-
-## Безопасность
-
-- `BOT_TOKEN` и `GEMINI_API_KEY` никогда не коммитятся — только через
-  `.env` (локально, в `.gitignore`) или GitHub Secrets.
-- `BOT_TOKEN` даёт полный доступ к управлению ботом — храните его как
-  пароль; при компрометации немедленно отзовите токен через
-  @BotFather → `/revoke`.
-- Отключить функцию «Чат-боты» для этого бота можно в любой момент в
-  Настройках Telegram Business — доступ к вашим чатам будет немедленно
-  прекращён.
-- Контейнер в Dockerfile запускается от непривилегированного
-  пользователя `appuser`.
-
-## Разработка плагинов
-
-Создайте файл в `assistant/plugins/your_plugin.py`:
-
-```python
-from aiogram import Dispatcher, F, Router
-from aiogram.types import Message
-
-from assistant.handlers.access import is_message_from_owner
-from assistant.plugins.base import Plugin
-
-
-class YourPlugin(Plugin):
-    name = "your_plugin"
-    description = "Что делает плагин"
-
-    def register(self, dp: Dispatcher) -> None:
-        router = Router(name="plugin_your_plugin")
-
-        async def handler(message: Message) -> None:
-            if not await is_message_from_owner(message):
-                return
-            await message.reply("Привет из плагина!")
-
-        pattern = r"(?i)^/yourcmd"
-        router.message.register(handler, F.text.regexp(pattern))
-        router.business_message.register(handler, F.text.regexp(pattern))
-        dp.include_router(router)
+```bash
+sudo cp deploy/aibot.service /etc/systemd/system/aibot.service
+# отредактируй в файле WorkingDirectory и User под свой сервер
+sudo systemctl daemon-reload
+sudo systemctl enable --now aibot
+sudo systemctl status aibot     # проверить статус
+journalctl -u aibot -f          # смотреть логи в реальном времени
 ```
 
-Плагин будет автоматически найден и зарегистрирован при старте
-(`plugins/loader.py`), если `PLUGINS_ENABLED=true`.
+---
 
-## Лицензия
+## 📂 Структура проекта
 
-Используйте и модифицируйте свободно для личных нужд.
+```
+aiasistent-main/
+├── bot.py                     # Точка входа
+├── requirements.txt
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── deploy/
+│   └── aibot.service           # systemd unit для VPS
+├── .github/workflows/
+│   └── bot.yml                 # CI/CD-запуск через GitHub Actions
+├── config/
+│   └── config.py                # Все настройки
+├── database/
+│   └── database.py              # SQLite: пользователи, история, автоответы
+├── handlers/
+│   ├── admin.py                 # Панель управления
+│   ├── users.py                 # Бизнес-чаты → ИИ ответы
+│   └── support.py               # Тикеты поддержки
+├── keyboards/
+│   ├── inline.py
+│   └── reply.py
+├── middlewares/
+│   ├── auth.py
+│   └── antispam.py
+└── utils/
+    ├── ai.py                    # Gemini: генерация с историей и фолбэком моделей
+    └── helpers.py                # Рассылка, форматирование
+```
