@@ -52,7 +52,54 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Debug — check that secrets are actually visible here
+        run: |
+          check() {
+            name="$1"
+            val="$2"
+            len=${#val}
+            if [ "$len" -eq 0 ]; then
+              echo "  $name: ПУСТО (длина 0) — GitHub не передал значение в этот job"
+            else
+              echo "  $name: OK (длина $len символов)"
+            fi
+          }
+          echo "Проверка секретов, видимых текущему workflow:"
+          check "BOT_TOKEN"     "${{ secrets.BOT_TOKEN }}"
+          check "OWNER_ID"      "${{ secrets.OWNER_ID }}"
+          check "GEMINI_KEY"    "${{ secrets.GEMINI_KEY }}"
+          echo ""
+          echo "Если тут ПУСТО, а в Settings → Secrets and variables → Actions секрет"
+          echo "точно есть — самые частые причины:"
+          echo "  1) секрет добавлен на вкладке Variables, а не Secrets;"
+          echo "  2) секрет привязан к Environment (например production), а не к репозиторию;"
+          echo "  3) опечатка в имени секрета или он добавлен не в тот репозиторий/форк."
+
+      - name: Validate required secrets
+        run: |
+          missing=0
+          if [ -z "${{ secrets.BOT_TOKEN }}" ]; then
+            echo "❌ Секрет BOT_TOKEN не задан."
+            missing=1
+          fi
+          if [ -z "${{ secrets.OWNER_ID }}" ]; then
+            echo "❌ Секрет OWNER_ID не задан."
+            missing=1
+          fi
+          if [ -z "${{ secrets.GEMINI_KEY }}" ]; then
+            echo "⚠️  Секрет GEMINI_KEY не задан — бот запустится, но ИИ-ответы будут отключены."
+          fi
+          if [ "$missing" = "1" ]; then
+            echo ""
+            echo "Добавь недостающие секреты: репозиторий → Settings → Secrets and variables → Actions → New repository secret."
+            echo "Обязательные: BOT_TOKEN, OWNER_ID, GEMINI_KEY."
+            exit 1
+          fi
+
       - name: Restore database from previous run
+        # На самом первом запуске артефакта ещё не существует — шаг покажет
+        # "Error: Artifact not found for name: bot-database" в логе, это
+        # нормально и не останавливает workflow благодаря continue-on-error.
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -88,3 +135,4 @@ jobs:
           path: bot.db
           retention-days: 7
           overwrite: true
+
