@@ -5,7 +5,7 @@ from aiogram.filters import StateFilter
 
 from database.database import (
     find_autoreply, get_ai_settings, is_contact_blocked,
-    log_message, add_user, get_ai_settings
+    log_message, add_user
 )
 from utils.ai import generate_ai_reply
 
@@ -50,8 +50,8 @@ async def handle_business_message(message: Message):
         logger.info("Auto-reply disabled in settings — skipping.")
         return
 
+    # Убрали business_connection_id, так как aiogram подставит его автоматически
     reply_kwargs = {
-        "business_connection_id": message.business_connection_id,
         "parse_mode": "HTML",
     }
 
@@ -59,18 +59,23 @@ async def handle_business_message(message: Message):
     autoreply = await find_autoreply(trigger_text.strip())
 
     if autoreply:
-        rtype = autoreply["reply_type"]
-        reply_text = autoreply.get("reply_text", "")
-        caption_text = autoreply.get("caption") or reply_text
+        # Превращаем Row в обычный словарь, чтобы работали методы .get()
+        autoreply_data = dict(autoreply)
+        
+        rtype = autoreply_data["reply_type"]
+        reply_text = autoreply_data.get("reply_text", "")
+        caption_text = autoreply_data.get("caption") or reply_text
+        
         try:
             if rtype == "text":
                 await message.answer(reply_text, **reply_kwargs)
             elif rtype == "photo":
-                await message.answer_photo(autoreply["file_id"], caption=caption_text, **reply_kwargs)
+                await message.answer_photo(autoreply_data["file_id"], caption=caption_text, **reply_kwargs)
             elif rtype == "video":
-                await message.answer_video(autoreply["file_id"], caption=caption_text, **reply_kwargs)
+                await message.answer_video(autoreply_data["file_id"], caption=caption_text, **reply_kwargs)
             elif rtype == "document":
-                await message.answer_document(autoreply["file_id"], caption=caption_text, **reply_kwargs)
+                await message.answer_document(autoreply_data["file_id"], caption=caption_text, **reply_kwargs)
+            
             await log_message(sender_id, reply_text, "outgoing", chat_id)
             logger.info(f"Статический автоответ → чат {chat_id}")
         except Exception as e:
@@ -97,3 +102,4 @@ async def handle_business_message(message: Message):
             logger.info(f"ИИ-ответ отправлен → чат {chat_id}")
         except Exception as e:
             logger.error(f"Не удалось отправить ИИ-ответ: {e}")
+            
