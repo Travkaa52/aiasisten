@@ -1,20 +1,41 @@
-name: Telegram AI Assistant
+name: Telegram Bot (long-running via scheduled runs)
+
+# ⚠️  ВАЖНО ПРО GITHUB ACTIONS ДЛЯ ДОЛГОЖИВУЩЕГО БОТА
+# GitHub-раннеры не умеют работать вечно: у джобы жёсткий потолок 6 часов,
+# а сама виртуалка после каждого запуска УДАЛЯЕТСЯ вместе с локальными
+# файлами. Поэтому это workflow периодически перезапускает бота (cron) и
+# сохраняет базу данных (bot.db) между запусками через Actions Artifacts,
+# чтобы история диалогов, пользователи и настройки не терялись.
+#
+# Это рабочее решение для старта и для небольшой нагрузки, но оно НЕ такое
+# надёжное, как обычный сервер: между перезапусками возможен разрыв в
+# несколько секунд, а при сбое раннера возможна потеря последних минут
+# истории. Для боевого использования смотри README → раздел "Деплой" —
+# там есть Docker и systemd вариант на VPS, которые работают действительно
+# 24/7 без перерывов.
 
 on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
   schedule:
-    # Каждые 5 минут. GitHub гарантирует лишь "не чаще, чем раз в 5 минут",
-    # фактический интервал может немного плавать под нагрузкой платформы.
-    - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+    # Перезапуск каждые 6 часов — джоба сама завершится штатно за 10 минут
+    # до этой отметки, а новый запуск подхватит сохранённую базу.
+    - cron: "0 */6 * * *"
 
+# Не даём двум копиям бота работать одновременно (иначе Telegram API
+# начнёт отдавать 409 Conflict на getUpdates). Новый запуск дожидается
+# завершения предыдущего.
 concurrency:
-  group: telegram-ai-assistant
+  group: telegram-bot-polling
   cancel-in-progress: false
 
 jobs:
-  run-assistant:
+  run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # Хард-лимит GitHub-раннера — 360 минут. Берём с запасом, чтобы успеть
+    # штатно остановить бота и сохранить артефакт с базой данных.
+    timeout-minutes: 350
 
     steps:
       - name: Checkout repository
@@ -31,33 +52,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Prepare runtime directories
-        run: mkdir -p data logs assistant/cache/storage
-
-      - name: Restore persisted database (if present)
-        uses: actions/cache@v4
+      - name: Restore database from previous run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
-          path: data
-          key: assistant-db-${{ github.run_id }}
-          restore-keys: |
-            assistant-db-
+          name: bot-database
+          path: .
 
-      - name: Run assistant
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          OWNER_IDS: ${{ secrets.OWNER_IDS }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          GEMINI_IMAGE_MODEL: ${{ vars.GEMINI_IMAGE_MODEL }}
-          RUN_DURATION_SECONDS: ${{ vars.RUN_DURATION_SECONDS }}
-          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
-          WHITELIST_MODE: ${{ vars.WHITELIST_MODE }}
-        run: python -m assistant.main
+      - name: Create .env file from secrets
+        run: |
+          {
+            echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}"
+            echo "OWNER_ID=${{ secrets.OWNER_ID }}"
+            echo "SUPPORT_GROUP_ID=${{ secrets.SUPPORT_GROUP_ID }}"
+            echo "GEMINI_KEY=${{ secrets.GEMINI_KEY }}"
+            echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL || 'gemini-3.5-flash' }}"
+            echo "GEMINI_MODEL_FALLBACK=${{ secrets.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash' }}"
+            echo "OWNER_NAME=${{ secrets.OWNER_NAME }}"
+            echo "BUSINESS_NAME=${{ secrets.BUSINESS_NAME }}"
+            echo "BUSINESS_DESCRIPTION=${{ secrets.BUSINESS_DESCRIPTION }}"
+            echo "AI_LANGUAGE=${{ secrets.AI_LANGUAGE || 'ru' }}"
+            echo "AI_HISTORY_DEPTH=${{ secrets.AI_HISTORY_DEPTH || '10' }}"
+            echo "DATABASE_PATH=bot.db"
+            echo "LOG_LEVEL=INFO"
+          } >> .env
 
-      - name: Upload logs on failure
-        if: failure()
+      - name: Run bot (stops itself 10 min before the job timeout)
+        run: timeout --signal=TERM 340m python bot.py || true
+
+      - name: Save database for the next run
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: assistant-logs-${{ github.run_id }}
-          path: logs/
+          name: bot-database
+          path: bot.db
           retention-days: 7
+          overwrite: true
